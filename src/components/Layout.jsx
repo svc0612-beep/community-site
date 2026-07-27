@@ -20,7 +20,9 @@ export default function Layout() {
         </nav>
 
         <div className="topbar-right">
-          <span className="topbar-name">{profile?.name}</span>
+          <NavLink to="/mypage" className="topbar-name">
+            {profile?.name}
+          </NavLink>
           <button className="btn btn-sm" onClick={signOut}>로그아웃</button>
         </div>
       </header>

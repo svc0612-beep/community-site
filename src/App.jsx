@@ -14,6 +14,7 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import Events from './pages/Events'
+import MyPage from './pages/MyPage'
 
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
               <Route path="/questions/:id" element={<QuestionDetail />} />
               <Route path="/jobs" element={<Jobs />} />
               <Route path="/events" element={<Events />} />
+              <Route path="/mypage" element={<MyPage />} />
 
               <Route element={<RoleRoute allow={['manager', 'admin']} />}>
                 <Route path="/members" element={<Members />} />
