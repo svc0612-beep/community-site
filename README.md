@@ -1,16 +1,311 @@
-# React + Vite
+# AI 데이터분석 교육생 커뮤니티
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+경기남부직업능력개발원 AI 데이터분석 과정 교육생을 위한 커뮤니티 사이트입니다.
+수업 자료를 내려받고, 과제나 에러에 대해 묻고 답하며, 취업 정보와 원내 일정을 공유합니다.
 
-Currently, two official plugins are available:
+**배포 주소** · https://community-site-lovat.vercel.app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```
+React + Vite  ·  Supabase (PostgreSQL + Auth + Storage)  ·  Vercel
+```
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 왜 만들었나
 
-## Expanding the Oxlint configuration
+교육을 받으면서 반복적으로 겪은 네 가지 불편이 그대로 네 개의 페이지가 되었습니다.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+| 문제 | 해결 |
+|---|---|
+| 수업 자료가 카톡방에 묻혀 못 찾음 | 수업 자료 페이지 — 모듈별 분류, 검색 |
+| 퇴근 후·주말에 궁금한 점을 물을 곳이 없음 | 질문 게시판 — 이미지 첨부, 댓글, 답변 채택 |
+| 채용 정보가 흩어져 있음 | 취업 정보 — 링크 여러 개 묶어서 공유 |
+| 휴무일·행사 공지가 분산됨 | 일정 — 월간 캘린더 |
+
+---
+
+## 설계에서 가장 고민한 것
+
+### 기수와 모듈의 분리
+
+이 사이트의 구조를 결정한 것은 실제 교육 운영 방식이었습니다.
+
+- 3개월마다 새 기수가 입학하고, 과정은 1년입니다. **항상 네 개 기수가 동시에 진행됩니다.**
+- 커리큘럼은 4개 모듈로 나뉘고, 모듈마다 담당 강사가 다릅니다.
+- **모듈 진도는 기수가 아니라 교육생 개인의 역량에 따라 결정됩니다.**
+
+처음에는 기수를 기준으로 자료와 질문을 나누려 했습니다. 그런데 유급하거나 월반한 교육생이
+엉뚱한 자료를 보게 된다는 문제가 드러났습니다.
+
+```
+26년 1월반 ─┐
+26년 4월반 ─┼─→  2모듈 · 파이썬 기초   ← 서로 다른 기수가 한 모듈에 섞임
+26년 7월반 ─┘
+```
+
+그래서 콘텐츠 분류 기준을 **기수가 아닌 모듈**로 바꿨습니다.
+`profiles.module_id`가 교육생마다 개별로 배정되고, 자료와 질문은 이 값으로 필터링됩니다.
+
+이 판단이 강사 배정 구조에도 영향을 줬습니다. 한 모듈에 여러 기수가 섞여 있으므로
+"26년 1월반 3모듈 강사"라는 개념이 성립하지 않습니다. `module_instructors`에서 기수를 뺀 이유입니다.
+
+### 권한은 프론트엔드가 아니라 DB에서
+
+별도의 백엔드 서버 없이 React가 Supabase에 직접 요청을 보냅니다.
+그럼에도 안전한 것은 모든 판단을 PostgreSQL의 **RLS(Row Level Security)** 가 하기 때문입니다.
+
+```
+사용자 → 토큰과 함께 요청 → DB가 정책 대조 → 통과한 행만 반환
+```
+
+화면에서 버튼을 숨기는 것은 편의일 뿐입니다.
+브라우저 개발자 도구로 API를 직접 호출해도 권한 밖의 데이터는 나오지 않습니다.
+
+```sql
+-- 수업 자료 조회 정책
+create policy "자료 조회" on materials
+  for select using (
+    my_role() in ('manager', 'admin')   -- 운영진은 전체
+    or teaches_module(module_id)        -- 강사는 담당 모듈
+    or module_id = my_module_id()       -- 교육생은 본인 모듈
+  );
+```
+
+---
+
+## 권한 체계
+
+네 단계로 나눴습니다.
+
+| 등급 | 주요 권한 |
+|---|---|
+| **AI 팀장** `admin` | 전체 관리, 모든 등급 부여, 팀장 양도 |
+| **담당 선생님** `manager` | 교육생 관리, 강사 임명, 모듈 배정, 공지 등록 |
+| **강사** `instructor` | 담당 모듈 자료 업로드, 질문 답변·채택 |
+| **교육생** `student` | 자료 열람, 질문 작성, 댓글 |
+
+### 원칙 세 가지
+
+**남의 글은 삭제만 되고 수정은 아무도 못 합니다.** 팀장이라도요.
+부적절한 글을 치울 수단은 필요하지만, 남의 글이 몰래 바뀌는 것은 지워지는 것보다 위험합니다.
+삭제는 없어진 것을 바로 알 수 있지만 수정은 모르고 지나갑니다.
+
+**본인 등급은 스스로 바꿀 수 없습니다.** 팀장을 넘기려면 상대를 팀장으로 올린 뒤
+그 사람이 나를 내려야 합니다. 번거롭지만 팀장이 0명이 되어 복구 불가능해지는 사고를 막습니다.
+
+**개인정보는 최소 노출.** 강사와 교육생은 다른 회원의 이메일·연락처를 볼 수 없습니다.
+게시판에는 닉네임만 표시되며, 이를 위해 닉네임과 등급만 담은 `member_public` 뷰를 따로 뒀습니다.
+
+---
+
+## 기능
+
+### 수업 자료
+- 교육생은 현재 배정 모듈의 자료만 열람
+- 강사는 담당 모듈, 운영진은 탭으로 전체 전환
+- 자료 하나에 파일 여러 개 (PDF · PPT · Word · Excel · 이미지, 개당 50MB)
+- 비공개 버킷 + 1분 유효 서명 URL로 다운로드
+
+### 질문 게시판
+- 모듈별 분리
+- **Ctrl+V로 캡처 이미지 바로 첨부** — 에러 질문은 스크린샷이 대부분이라 필수였습니다
+- 댓글 · 대댓글, 댓글에도 이미지 첨부 가능
+- 답변 채택 (질문자 · 담당 강사 · 운영진)
+- 채택할 답변이 없어도 "해결됨" 상태 전환 가능
+- 검색, 최신순 · 조회순 · 댓글순 정렬
+- 답변자 등급 태그 표시 — 여러 답변 중 누구 말을 믿을지 판단 가능
+
+### 취업 정보
+- 공식 채용공고 / 교육생 공유 두 개 탭
+- **URL 여러 개를 한 번에 붙여넣으면 자동으로 각 행으로 분리**
+- 목록은 접힌 상태, 제목 클릭 시 링크 펼침
+
+### 일정
+- 월간 캘린더, 종류별 색 구분 (휴무 · 행사 · 평가 · 기타)
+- 여러 날 일정은 해당 기간 전체에 표시
+- 운영진이 날짜를 클릭하면 그 날짜로 등록 폼이 열림
+- 날짜 계산은 `Date` 객체에 위임 — 윤년과 요일 배치가 어느 해든 정확
+
+### 관리
+- **회원 관리** — 등급 변경, 모듈 배정, 차단 (삭제 아님, 글은 보존)
+- **강사 배정** — 모듈별 담당 강사 지정, 계약 종료 시 이력 보존
+- **마이페이지** — 닉네임 · 연락처 · 비밀번호 변경
+
+---
+
+## 데이터베이스
+
+13개 테이블. 계정은 Supabase Auth가, 서비스 정보는 `profiles`가 관리합니다.
+
+```
+programs (과정)
+   └─ cohorts (기수)  ─── 3개월 간격, 1년 과정
+   └─ modules (모듈)  ─── 4단계 커리큘럼
+         └─ module_instructors (강사 배정)
+
+profiles (회원) ── cohort_id (입학 기수)
+                └─ module_id (현재 모듈)   ← 개인별 배정
+
+materials ─ material_files          수업 자료
+questions ─ comments ─ question_images   질문 게시판
+jobs ─ job_links                    취업 정보
+events                              일정
+```
+
+### 몇 가지 선택
+
+**댓글이 자기 자신을 참조합니다.** `parent_id`가 비어 있으면 댓글, 값이 있으면 대댓글.
+테이블 하나로 처리하고 화면에서는 1단계까지만 표시합니다. 그 이상은 모바일에서 읽을 수 없습니다.
+
+**게시판을 두 개 만들지 않았습니다.** 취업 정보는 `category` 컬럼으로 공식/공유를 구분합니다.
+분리하면 같은 코드를 두 벌 관리해야 합니다.
+
+**일정 시간은 텍스트 타입입니다.** `09:00`도 `오전 중`도 담아야 했습니다.
+날짜는 `date`를 써서 시간대 오차를 원천 차단했습니다.
+
+**모든 콘텐츠 테이블이 `touch_updated_at()` 트리거 하나를 공유합니다.**
+
+### 핵심 트리거
+
+`protect_privileges` — 이것이 없으면 교육생이 API를 직접 호출해 자신을 `admin`으로 바꿀 수 있습니다.
+
+```sql
+-- 판정 순서
+1. 대시보드 작업(auth.uid() 없음)         → 통과 (복구 수단)
+2. 본인의 role·status·module 변경         → 차단
+3. role 변경: admin 전체 / manager는 강사만
+4. status·cohort·module: manager, admin만
+5. manager는 manager·admin 대상 변경 불가
+```
+
+1번 예외가 중요합니다. Supabase 대시보드에서는 로그인 사용자가 없어 `auth.uid()`가 비어 있는데,
+이를 통과시켜야 관리자가 잠겼을 때 복구할 수 있습니다.
+
+---
+
+## 자동화
+
+### 기수 자동 생성
+
+3개월마다 새 기수가 입학하는데, 가입 화면 목록에 없으면 신입 교육생이 가입 자체를 못 합니다.
+담당 선생님이 SQL을 다룰 수 없으므로 사람 손을 타지 않게 했습니다.
+
+```sql
+select cron.schedule(
+  'ensure-cohorts',
+  '0 0 1 * *',                          -- 매달 1일 자정
+  $$ select ensure_future_cohorts() $$
+);
+```
+
+항상 2년 앞까지 확인해 없으면 채웁니다. 기수명과 수료일은 입학일만 있으면 트리거가 계산합니다.
+회원가입 드롭다운은 오늘 날짜가 입학일~수료일 사이인 기수만 표시하므로,
+수료한 기수는 자동으로 사라지고 새 기수는 때가 되면 나타납니다. **코드를 고칠 일이 없습니다.**
+
+---
+
+## 겪은 문제와 해결
+
+| 증상 | 원인 | 해결 |
+|---|---|---|
+| 조회 결과가 빈 배열 | RLS 정책 없음 (기본값은 전부 차단) | 정책 추가 |
+| INSERT만 계속 실패 | `for all`에 `with check` 누락 | `with check` 추가 |
+| 무한 재귀 오류 | 정책 안에서 같은 테이블 조회 | `security definer` 함수로 분리 |
+| enum 추가 후 바로 사용 불가 | 같은 트랜잭션 내 제약 | SQL을 두 번에 나눠 실행 |
+| 로그인 후 로딩에서 멈춤 | `onAuthStateChange` 콜백 안에서 쿼리 호출 | `useEffect` 분리 |
+| 작성자가 "알 수 없음" | RLS로 남의 프로필 조회 차단됨 | `member_public` 뷰 사용 |
+| 배포 후 하위 경로 404 | SPA 라우팅 미설정 | `vercel.json` rewrites |
+| 배포 시 파일을 못 찾음 | 윈도우는 대소문자 무시, 리눅스는 구분 | 파일명 수정 |
+
+### 비밀번호 찾기를 직접 만든 이유
+
+Supabase 기본 메일 서비스는 사전 승인된 주소로만 발송되어 실제 사용자에게 도달하지 않습니다.
+그래서 메일 없이 **이메일 + 휴대폰번호**로 본인을 확인하는 방식을 만들었습니다.
+
+```
+1단계  이메일 + 휴대폰번호 대조 (숫자만 추출해 비교 — 하이픈 무관)
+       ↓  일치 시 10분 유효 1회용 토큰 발급
+2단계  같은 화면에서 새 비밀번호 입력
+```
+
+- 운영진 계정은 이 경로 차단 — 계정이 넘어가면 사이트 전체가 넘어감
+- 15분 내 5회 실패 시 차단 — 번호를 찍어보는 시도 방지
+- 토큰을 주소창에 노출하지 않음 — 링크 복사로 계정이 넘어가는 것 방지
+
+같은 반 사람끼리는 연락처를 알 수 있어 완벽하지 않습니다.
+회원 목록을 닫고 운영진을 제외해 피해 범위를 제한했습니다.
+
+---
+
+## 구조
+
+```
+src/
+├─ lib/supabase.js           Supabase 클라이언트
+├─ contexts/AuthContext.jsx  세션 + 프로필 전역 관리
+├─ components/
+│  ├─ Layout.jsx             상단 메뉴 공통 틀
+│  ├─ ProtectedRoute.jsx     로그인·차단 검사
+│  ├─ RoleRoute.jsx          등급별 접근 제한
+│  └─ Calendar.jsx           월간 캘린더
+└─ pages/
+   ├─ Login · Signup · ForgotPassword
+   ├─ Home
+   ├─ Materials
+   ├─ Questions · QuestionDetail
+   ├─ Jobs
+   ├─ Events
+   ├─ Members · Modules      운영진 전용
+   └─ MyPage
+```
+
+라우팅은 3중 구조입니다.
+
+```
+/login, /signup, /forgot-password        누구나
+
+ProtectedRoute                           로그인 + 차단 여부
+  └ Layout                               상단 메뉴
+      ├ /, /materials, /questions, /jobs, /events, /mypage
+      └ RoleRoute (manager, admin)
+          └ /members, /modules
+```
+
+---
+
+## 실행
+
+```bash
+git clone https://github.com/svc0612-beep/community-site.git
+cd community-site
+npm install
+```
+
+`.env` 파일을 만들고 Supabase 값을 채웁니다.
+
+```
+VITE_SUPABASE_URL=https://xxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_xxxxx
+```
+
+```bash
+npm run dev
+```
+
+---
+
+## 남은 과제
+
+- **알림** — 내 질문에 답변이 달렸을 때
+- **코드 블록** — 에러 로그를 읽기 좋게
+- **기수 관리 화면** — 취소·변경된 기수를 화면에서 수정
+- **SMTP 연결** — 이메일 인증을 다시 켜려면 필요
+- **서버 검색** — 현재는 브라우저에서 필터링, 수천 건 이상이면 전환 필요
+
+### 알아둘 점
+
+프로필 정보는 로그인 시점에 캐시합니다. 운영진이 모듈이나 등급을 바꿔도
+해당 사용자가 새로고침해야 반영됩니다.
+
+가입은 자동 승인입니다. 주소를 아는 외부인도 가입할 수 있어,
+필요하면 가입 코드 방식을 추가할 수 있습니다.
