@@ -754,3 +754,64 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .summary dt { color: var(--muted); }
 .summary dd { margin: 0; }
+
+/* ========== 폰 (480px 이하) ========== */
+
+@media (max-width: 480px) {
+  .main { padding: 20px 14px 48px !important; }
+
+  .page-title { font-size: 1.3rem; }
+
+  /* 표 — 가로 스크롤 명시 */
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+  .table { font-size: 0.82rem; }
+  .table th, .table td { padding: 8px 10px; }
+
+  /* 필터 — 세로 배치 */
+  .filters { flex-direction: column; }
+  .filters .input,
+  .filters .select,
+  .filters .btn { width: 100% !important; max-width: none !important; }
+
+  /* 2열 입력 → 1열 */
+  .row-2 { grid-template-columns: 1fr !important; }
+
+  /* 취업정보 링크 입력 */
+  .link-row { flex-direction: column; }
+  .link-label { max-width: none !important; }
+
+  /* 캘린더 */
+  .cal-cell { min-height: 52px !important; padding: 3px 2px !important; }
+  .cal-num { font-size: 0.7rem; }
+  .cal-ev { font-size: 0.52rem !important; padding: 1px 2px !important; }
+  .cal-head { font-size: 0.68rem; padding: 6px 0; }
+  .cal-bar { gap: 6px; }
+  .cal-month { font-size: 0.95rem; }
+  .cal-add { margin-left: 0 !important; width: 100%; }
+
+  /* 이미지 */
+  .q-img, .q-img-sm { max-width: 100% !important; height: auto; }
+
+  /* 타일 1열 */
+  .card-grid { grid-template-columns: 1fr !important; }
+
+  /* 대댓글 들여쓰기 축소 */
+  .comment-child { margin-left: 8px !important; padding-left: 10px !important; }
+
+  /* 버튼 줄바꿈 */
+  .quick, .comment-actions, .row { flex-wrap: wrap; }
+
+  /* 취업정보 카드 */
+  .job-head { flex-wrap: wrap; gap: 6px !important; }
+  .job-title { flex-basis: 100%; font-size: 0.92rem; }
+  .job-body-wrap { padding: 0 12px 12px !important; }
+
+  /* 일정 카드 */
+  .ev-card { flex-direction: column; }
+  .ev-actions { flex-direction: row; }
+
+  /* 인증 화면 */
+  .auth-card { padding: 22px 18px !important; }
+  .inline { flex-wrap: wrap; }
+  .inline .input { flex-basis: 100%; }
+}
