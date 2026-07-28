@@ -70,11 +70,14 @@ export default function Login() {
           {busy ? '로그인 중…' : '로그인'}
         </button>
 
-        <p className="auth-foot">
+        <div className="auth-foot">
           <Link to="/forgot-password">비밀번호 찾기</Link>
           {' · '}
           <Link to="/signup">가입하기</Link>
-        </p>
+          <p className="note">
+            가입한 이메일이 기억나지 않으면 담당 선생님께 문의해 주세요.
+          </p>
+        </div>
       </form>
     </div>
   )

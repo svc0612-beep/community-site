@@ -923,7 +923,7 @@ a:focus-visible,
   color: var(--muted);
   text-align: center;
 }
-
+.auth-foot .note { margin-top: 8px; }
 
 /* ═══════════════════════════════════════════
    12. 반응형
